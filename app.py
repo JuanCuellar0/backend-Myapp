@@ -49,6 +49,30 @@ def create_app():
             'status': 'healthy',
             'environment': os.getenv('FLASK_ENV', 'development')
         })
+
+    @app.route("/", methods=["GET"])
+    def index():
+        return (
+            jsonify(
+                {
+                    "service": "Edu-Retention Backend",
+                    "status": "ok",
+                    "endpoints": {
+                        "health": "/health",
+                        "auth": {
+                            "register": "/api/auth/register",
+                            "login": "/api/auth/login",
+                            "logout": "/api/auth/logout",
+                            "recover_password": "/api/auth/recover-password",
+                        },
+                        "users": {"profile_get": "/api/users/profile", "profile_put": "/api/users/profile"},
+                        "surveys": "/api/surveys",
+                        "contacts": "/api/contacts",
+                    },
+                }
+            ),
+            200,
+        )
     
     # Error handlers
     @app.errorhandler(404)
