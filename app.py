@@ -3,7 +3,7 @@ Backend API para Edu-Retention
 Separado del frontend para mejor escalabilidad
 """
 import os
-from flask import Flask, jsonify
+from flask import Flask, Response, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -73,6 +73,261 @@ def create_app():
             ),
             200,
         )
+
+    @app.route("/openapi.json", methods=["GET"])
+    def openapi():
+        return jsonify(
+            {
+                "openapi": "3.0.3",
+                "info": {
+                    "title": "Edu-Retention Backend API",
+                    "version": "1.0.0",
+                },
+                "servers": [{"url": "/"}],
+                "paths": {
+                    "/health": {
+                        "get": {
+                            "summary": "Health check",
+                            "responses": {
+                                "200": {
+                                    "description": "OK",
+                                    "content": {"application/json": {"schema": {"type": "object"}}},
+                                }
+                            },
+                        }
+                    },
+                    "/api/surveys": {
+                        "get": {
+                            "summary": "Listar encuestas",
+                            "responses": {
+                                "200": {
+                                    "description": "Lista de encuestas",
+                                    "content": {"application/json": {"schema": {"type": "array"}}},
+                                }
+                            },
+                        },
+                        "post": {
+                            "summary": "Crear encuesta",
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "titulo": {"type": "string"},
+                                                "descripcion": {"type": "string"},
+                                                "estado": {"type": "string"},
+                                                "preguntas": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "pregunta": {"type": "string"},
+                                                            "tipo": {"type": "string"},
+                                                            "requerida": {"type": "boolean"},
+                                                            "opciones": {"type": "array", "items": {"type": "string"}},
+                                                        },
+                                                        "required": ["pregunta", "tipo"],
+                                                    },
+                                                },
+                                            },
+                                            "required": ["titulo", "descripcion", "preguntas"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {
+                                "201": {
+                                    "description": "Encuesta creada",
+                                    "content": {"application/json": {"schema": {"type": "object"}}},
+                                }
+                            },
+                        },
+                    },
+                    "/api/surveys/{survey_id}": {
+                        "get": {
+                            "summary": "Obtener encuesta por ID",
+                            "parameters": [
+                                {
+                                    "name": "survey_id",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "responses": {
+                                "200": {
+                                    "description": "Encuesta",
+                                    "content": {"application/json": {"schema": {"type": "object"}}},
+                                },
+                                "404": {"description": "No encontrada"},
+                            },
+                        },
+                        "put": {
+                            "summary": "Actualizar encuesta",
+                            "parameters": [
+                                {
+                                    "name": "survey_id",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "requestBody": {
+                                "required": False,
+                                "content": {
+                                    "application/json": {"schema": {"type": "object"}}
+                                },
+                            },
+                            "responses": {
+                                "200": {"description": "Actualizada"},
+                                "404": {"description": "No encontrada"},
+                            },
+                        },
+                        "delete": {
+                            "summary": "Eliminar encuesta",
+                            "parameters": [
+                                {
+                                    "name": "survey_id",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "responses": {"200": {"description": "Eliminada"}, "404": {"description": "No encontrada"}},
+                        },
+                    },
+                    "/api/surveys/{survey_id}/response": {
+                        "post": {
+                            "summary": "Enviar respuestas a encuesta",
+                            "parameters": [
+                                {
+                                    "name": "survey_id",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {"respuestas": {"type": "object"}},
+                                            "required": ["respuestas"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {
+                                "201": {"description": "Respuesta guardada"},
+                                "404": {"description": "Encuesta no encontrada"},
+                            },
+                        }
+                    },
+                    "/api/surveys/{survey_id}/responses": {
+                        "get": {
+                            "summary": "Listar respuestas de una encuesta",
+                            "parameters": [
+                                {
+                                    "name": "survey_id",
+                                    "in": "path",
+                                    "required": True,
+                                    "schema": {"type": "string"},
+                                }
+                            ],
+                            "responses": {"200": {"description": "Lista de respuestas", "content": {"application/json": {"schema": {"type": "array"}}}}},
+                        }
+                    },
+                    "/api/contacts": {
+                        "get": {
+                            "summary": "Listar contactos (usuarios)",
+                            "responses": {"200": {"description": "Lista de usuarios", "content": {"application/json": {"schema": {"type": "array"}}}}},
+                        }
+                    },
+                    "/api/contacts/search": {
+                        "get": {
+                            "summary": "Buscar contactos por nombre/email",
+                            "parameters": [
+                                {"name": "term", "in": "query", "required": False, "schema": {"type": "string"}}
+                            ],
+                            "responses": {"200": {"description": "Resultados", "content": {"application/json": {"schema": {"type": "array"}}}}},
+                        }
+                    },
+                    "/api/auth/register": {
+                        "post": {
+                            "summary": "Registrar usuario",
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "nombre": {"type": "string"},
+                                                "email": {"type": "string"},
+                                                "contraseña": {"type": "string"},
+                                            },
+                                            "required": ["nombre", "email", "contraseña"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {
+                                "201": {"description": "Usuario creado"},
+                                "400": {"description": "Datos inválidos"},
+                                "409": {"description": "Email ya existe"},
+                            },
+                        }
+                    },
+                    "/api/auth/login": {
+                        "post": {
+                            "summary": "Iniciar sesión (preparado para siguiente actividad)",
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {"email": {"type": "string"}, "contraseña": {"type": "string"}},
+                                            "required": ["email", "contraseña"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "Credenciales inválidas"}},
+                        }
+                    },
+                },
+            }
+        )
+
+    @app.route("/docs", methods=["GET"])
+    def docs():
+        html = """
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API Docs</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: "/openapi.json",
+        dom_id: "#swagger-ui",
+      });
+    </script>
+  </body>
+</html>
+""".strip()
+        return Response(html, mimetype="text/html")
     
     # Error handlers
     @app.errorhandler(404)
