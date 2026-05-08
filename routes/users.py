@@ -1,18 +1,22 @@
 from flask import Blueprint, jsonify, request
 
 from models import db, User
+from routes import decode_token, get_bearer_token
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 
 
 def _get_user_from_request():
     auth_header = request.headers.get("Authorization") or ""
-    if not auth_header.startswith("Bearer "):
+    token = get_bearer_token(auth_header)
+    if not token:
         return None
-    token = auth_header.split(" ", 1)[1].strip()
-    if not token.startswith("token-"):
+    payload = decode_token(token, expected_type="access")
+    if not payload:
         return None
-    user_id = token.replace("token-", "", 1)
+    user_id = str(payload.get("sub") or "").strip()
+    if not user_id:
+        return None
     return User.query.get(user_id)
 
 

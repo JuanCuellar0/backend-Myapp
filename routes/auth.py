@@ -3,6 +3,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import re
 
 from models import db, User
+from routes import create_access_token, create_refresh_token, decode_token
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -22,13 +23,18 @@ def login():
     if not usuario or not check_password_hash(usuario.password_hash, contraseña):
         return jsonify({"success": False, "mensaje": "Email o contraseña incorrectos"}), 401
 
+    access_token = create_access_token(usuario.id, usuario.rol)
+    refresh_token = create_refresh_token(usuario.id, usuario.rol)
+
     return (
         jsonify(
             {
                 "success": True,
                 "mensaje": "Sesión iniciada correctamente",
                 "usuario": usuario.to_public_dict(),
-                "token": f"token-{usuario.id}",
+                "token": access_token,
+                "refreshToken": refresh_token,
+                "expiresIn": 900,
             }
         ),
         200,
@@ -71,13 +77,18 @@ def register():
         db.session.rollback()
         return jsonify({"success": False, "mensaje": "Error al registrar usuario"}), 500
 
+    access_token = create_access_token(nuevo_usuario.id, nuevo_usuario.rol)
+    refresh_token = create_refresh_token(nuevo_usuario.id, nuevo_usuario.rol)
+
     return (
         jsonify(
             {
                 "success": True,
                 "mensaje": "Usuario registrado correctamente",
                 "usuario": nuevo_usuario.to_public_dict(),
-                "token": f"token-{nuevo_usuario.id}",
+                "token": access_token,
+                "refreshToken": refresh_token,
+                "expiresIn": 900,
             }
         ),
         201,
@@ -97,3 +108,40 @@ def recover_password():
         return jsonify({"success": False, "mensaje": "Email es requerido"}), 400
 
     return jsonify({"success": True, "mensaje": "Si el email existe, se enviará un correo de recuperación"}), 200
+
+
+@auth_bp.route("/refresh", methods=["POST"])
+def refresh():
+    data = request.get_json(silent=True) or {}
+    refresh_token = data.get("refreshToken")
+    if not isinstance(refresh_token, str) or not refresh_token.strip():
+        return jsonify({"success": False, "mensaje": "refreshToken es requerido"}), 400
+
+    payload = decode_token(refresh_token.strip(), expected_type="refresh")
+    if not payload:
+        return jsonify({"success": False, "mensaje": "Refresh token inválido o expirado"}), 401
+
+    user_id = str(payload.get("sub") or "").strip()
+    if not user_id:
+        return jsonify({"success": False, "mensaje": "Refresh token inválido"}), 401
+
+    usuario = User.query.get(user_id)
+    if not usuario:
+        return jsonify({"success": False, "mensaje": "Usuario no encontrado"}), 404
+
+    new_access = create_access_token(usuario.id, usuario.rol)
+    new_refresh = create_refresh_token(usuario.id, usuario.rol)
+
+    return (
+        jsonify(
+            {
+                "success": True,
+                "mensaje": "Token refrescado",
+                "token": new_access,
+                "refreshToken": new_refresh,
+                "expiresIn": 900,
+                "usuario": usuario.to_public_dict(),
+            }
+        ),
+        200,
+    )

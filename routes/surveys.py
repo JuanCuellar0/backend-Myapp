@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash
 
 from models import Survey, SurveyQuestion, SurveyResponse, User, db
+from routes import decode_token, get_bearer_token
 
 surveys_bp = Blueprint("surveys", __name__, url_prefix="/api/surveys")
 
@@ -26,6 +27,20 @@ def _ensure_default_user() -> User:
     db.session.add(user)
     db.session.commit()
     return user
+
+
+def _get_user_from_request() -> User | None:
+    auth_header = request.headers.get("Authorization") or ""
+    token = get_bearer_token(auth_header)
+    if not token:
+        return None
+    payload = decode_token(token, expected_type="access")
+    if not payload:
+        return None
+    user_id = str(payload.get("sub") or "").strip()
+    if not user_id:
+        return None
+    return User.query.get(user_id)
 
 
 def _normalize_questions(preguntas):
@@ -138,6 +153,10 @@ def list_surveys():
 @surveys_bp.route("/", methods=["POST"])
 def create_survey():
     data = request.get_json(silent=True) or {}
+    user = _get_user_from_request()
+    if not user:
+        return jsonify({"success": False, "mensaje": "Token requerido"}), 401
+
     titulo = data.get("titulo")
     descripcion = data.get("descripcion")
     preguntas = data.get("preguntas")
@@ -149,8 +168,7 @@ def create_survey():
     if not titulo or not descripcion or normalized_questions is None:
         return jsonify({"success": False, "mensaje": "Datos inválidos"}), 400
 
-    creador = _ensure_default_user()
-    survey = Survey(titulo=titulo, descripcion=descripcion, estado=data.get("estado") or "activa", creado_por=creador.id)
+    survey = Survey(titulo=titulo, descripcion=descripcion, estado=data.get("estado") or "activa", creado_por=user.id)
     db.session.add(survey)
     db.session.flush()
 
@@ -259,15 +277,18 @@ def submit_response(survey_id: str):
     if not survey:
         return jsonify({"success": False, "mensaje": "Encuesta no encontrada"}), 404
 
+    user = _get_user_from_request()
+    if not user:
+        return jsonify({"success": False, "mensaje": "Token requerido"}), 401
+
     data = request.get_json(silent=True) or {}
     respuestas = data.get("respuestas")
     if not isinstance(respuestas, dict):
         return jsonify({"success": False, "mensaje": "Respuestas inválidas"}), 400
 
-    usuario = _ensure_default_user()
     response = SurveyResponse(
         encuesta_id=survey.id,
-        usuario_id=usuario.id,
+        usuario_id=user.id,
         respuestas_json=json.dumps(respuestas),
     )
     db.session.add(response)
