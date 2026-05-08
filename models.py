@@ -128,25 +128,3 @@ class RiskReport(db.Model):
             "recomendaciones": json.loads(self.recomendaciones_json or "[]"),
             "fechaAnalisis": self.fecha_analisis,
         }
-
-
-class Notification(db.Model):
-    __tablename__ = "notifications"
-
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
-    usuario_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=True, index=True)
-    titulo = db.Column(db.String(200), nullable=False)
-    mensaje = db.Column(db.String(500), nullable=False)
-    tipo = db.Column(db.String(16), nullable=False, default="info")
-    fecha_creacion = db.Column(db.String(40), nullable=False, default=_utc_now_iso)
-    leida = db.Column(db.Boolean, nullable=False, default=False)
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "titulo": self.titulo,
-            "mensaje": self.mensaje,
-            "tipo": self.tipo,
-            "fechaCreacion": self.fecha_creacion,
-            "leida": bool(self.leida),
-        }
