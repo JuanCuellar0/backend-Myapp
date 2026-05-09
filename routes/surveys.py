@@ -3,12 +3,45 @@ import os
 
 from flask import Blueprint, jsonify, request
 from werkzeug.security import generate_password_hash
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from models import Survey, SurveyQuestion, SurveyResponse, User, db
 
 surveys_bp = Blueprint("surveys", __name__, url_prefix="/api/surveys")
 
 _ALLOWED_QUESTION_TYPES = {"texto", "seleccion", "numerica", "si_no"}
+_ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "900"))
+
+
+def _get_secret_key() -> str:
+    secret = os.getenv("SECRET_KEY") or ""
+    if not secret:
+        secret = "dev-secret-change-in-prod"
+    return secret
+
+
+def _serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(_get_secret_key(), salt="access")
+
+
+def _get_user_from_request():
+    auth_header = request.headers.get("Authorization") or ""
+    if not auth_header.startswith("Bearer "):
+        return None, "AUTH_REQUIRED"
+    token = auth_header.split(" ", 1)[1].strip()
+    try:
+        payload = _serializer().loads(token, max_age=_ACCESS_TOKEN_TTL_SECONDS)
+    except SignatureExpired:
+        return None, "TOKEN_EXPIRED"
+    except BadSignature:
+        return None, "TOKEN_INVALID"
+
+    if not isinstance(payload, dict) or payload.get("typ") != "access":
+        return None, "TOKEN_INVALID"
+    user_id = payload.get("sub")
+    if not user_id:
+        return None, "TOKEN_INVALID"
+    return User.query.get(str(user_id)), None
 
 
 def _ensure_default_user() -> User:
@@ -137,6 +170,13 @@ def list_surveys():
 @surveys_bp.route("", methods=["POST"])
 @surveys_bp.route("/", methods=["POST"])
 def create_survey():
+    user, err = _get_user_from_request()
+    if not user:
+        msg = "Autorización requerida" if err == "AUTH_REQUIRED" else "Token inválido"
+        if err == "TOKEN_EXPIRED":
+            msg = "Token expirado"
+        return jsonify({"success": False, "mensaje": msg, "code": err}), 401
+
     data = request.get_json(silent=True) or {}
     titulo = data.get("titulo")
     descripcion = data.get("descripcion")
@@ -149,8 +189,7 @@ def create_survey():
     if not titulo or not descripcion or normalized_questions is None:
         return jsonify({"success": False, "mensaje": "Datos inválidos"}), 400
 
-    creador = _ensure_default_user()
-    survey = Survey(titulo=titulo, descripcion=descripcion, estado=data.get("estado") or "activa", creado_por=creador.id)
+    survey = Survey(titulo=titulo, descripcion=descripcion, estado=data.get("estado") or "activa", creado_por=user.id)
     db.session.add(survey)
     db.session.flush()
 
@@ -179,6 +218,13 @@ def get_survey(survey_id: str):
 
 @surveys_bp.route("/<survey_id>", methods=["PUT"])
 def update_survey(survey_id: str):
+    user, err = _get_user_from_request()
+    if not user:
+        msg = "Autorización requerida" if err == "AUTH_REQUIRED" else "Token inválido"
+        if err == "TOKEN_EXPIRED":
+            msg = "Token expirado"
+        return jsonify({"success": False, "mensaje": msg, "code": err}), 401
+
     survey = Survey.query.get(survey_id)
     if not survey:
         return jsonify({"success": False, "mensaje": "Encuesta no encontrada"}), 404
@@ -237,6 +283,13 @@ def update_survey(survey_id: str):
 
 @surveys_bp.route("/<survey_id>", methods=["DELETE"])
 def delete_survey(survey_id: str):
+    user, err = _get_user_from_request()
+    if not user:
+        msg = "Autorización requerida" if err == "AUTH_REQUIRED" else "Token inválido"
+        if err == "TOKEN_EXPIRED":
+            msg = "Token expirado"
+        return jsonify({"success": False, "mensaje": msg, "code": err}), 401
+
     survey = Survey.query.get(survey_id)
     if not survey:
         return jsonify({"success": False, "mensaje": "Encuesta no encontrada"}), 404
@@ -255,6 +308,13 @@ def delete_survey(survey_id: str):
 
 @surveys_bp.route("/<survey_id>/response", methods=["POST"])
 def submit_response(survey_id: str):
+    user, err = _get_user_from_request()
+    if not user:
+        msg = "Autorización requerida" if err == "AUTH_REQUIRED" else "Token inválido"
+        if err == "TOKEN_EXPIRED":
+            msg = "Token expirado"
+        return jsonify({"success": False, "mensaje": msg, "code": err}), 401
+
     survey = Survey.query.get(survey_id)
     if not survey:
         return jsonify({"success": False, "mensaje": "Encuesta no encontrada"}), 404
@@ -264,10 +324,9 @@ def submit_response(survey_id: str):
     if not isinstance(respuestas, dict):
         return jsonify({"success": False, "mensaje": "Respuestas inválidas"}), 400
 
-    usuario = _ensure_default_user()
     response = SurveyResponse(
         encuesta_id=survey.id,
-        usuario_id=usuario.id,
+        usuario_id=user.id,
         respuestas_json=json.dumps(respuestas),
     )
     db.session.add(response)
@@ -277,6 +336,13 @@ def submit_response(survey_id: str):
 
 @surveys_bp.route("/<survey_id>/responses", methods=["GET"])
 def list_responses(survey_id: str):
+    user, err = _get_user_from_request()
+    if not user:
+        msg = "Autorización requerida" if err == "AUTH_REQUIRED" else "Token inválido"
+        if err == "TOKEN_EXPIRED":
+            msg = "Token expirado"
+        return jsonify({"success": False, "mensaje": msg, "code": err}), 401
+
     survey = Survey.query.get(survey_id)
     if not survey:
         return jsonify({"success": False, "mensaje": "Encuesta no encontrada"}), 404

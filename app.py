@@ -84,6 +84,14 @@ def create_app():
                     "version": "1.0.0",
                 },
                 "servers": [{"url": "/"}],
+                "components": {
+                    "securitySchemes": {
+                        "bearerAuth": {
+                            "type": "http",
+                            "scheme": "bearer",
+                        }
+                    }
+                },
                 "paths": {
                     "/health": {
                         "get": {
@@ -108,6 +116,7 @@ def create_app():
                         },
                         "post": {
                             "summary": "Crear encuesta",
+                            "security": [{"bearerAuth": []}],
                             "requestBody": {
                                 "required": True,
                                 "content": {
@@ -166,6 +175,7 @@ def create_app():
                         },
                         "put": {
                             "summary": "Actualizar encuesta",
+                            "security": [{"bearerAuth": []}],
                             "parameters": [
                                 {
                                     "name": "survey_id",
@@ -187,6 +197,7 @@ def create_app():
                         },
                         "delete": {
                             "summary": "Eliminar encuesta",
+                            "security": [{"bearerAuth": []}],
                             "parameters": [
                                 {
                                     "name": "survey_id",
@@ -201,6 +212,7 @@ def create_app():
                     "/api/surveys/{survey_id}/response": {
                         "post": {
                             "summary": "Enviar respuestas a encuesta",
+                            "security": [{"bearerAuth": []}],
                             "parameters": [
                                 {
                                     "name": "survey_id",
@@ -230,6 +242,7 @@ def create_app():
                     "/api/surveys/{survey_id}/responses": {
                         "get": {
                             "summary": "Listar respuestas de una encuesta",
+                            "security": [{"bearerAuth": []}],
                             "parameters": [
                                 {
                                     "name": "survey_id",
@@ -284,7 +297,7 @@ def create_app():
                     },
                     "/api/auth/login": {
                         "post": {
-                            "summary": "Iniciar sesión (preparado para siguiente actividad)",
+                            "summary": "Iniciar sesión",
                             "requestBody": {
                                 "required": True,
                                 "content": {
@@ -299,6 +312,47 @@ def create_app():
                             },
                             "responses": {"200": {"description": "OK"}, "401": {"description": "Credenciales inválidas"}},
                         }
+                    },
+                    "/api/auth/refresh": {
+                        "post": {
+                            "summary": "Refrescar access token",
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {"refreshToken": {"type": "string"}},
+                                            "required": ["refreshToken"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "Refresh inválido"}},
+                        }
+                    },
+                    "/api/users/profile": {
+                        "get": {
+                            "summary": "Obtener perfil",
+                            "security": [{"bearerAuth": []}],
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "No autorizado"}},
+                        },
+                        "put": {
+                            "summary": "Actualizar perfil",
+                            "security": [{"bearerAuth": []}],
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {"nombre": {"type": "string"}},
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "No autorizado"}},
+                        },
                     },
                 },
             }

@@ -38,6 +38,29 @@ class User(db.Model):
         }
 
 
+class RefreshToken(db.Model):
+    __tablename__ = "refresh_tokens"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False, index=True)
+    jti = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    token_hash = db.Column(db.String(128), nullable=False)
+    revoked = db.Column(db.Boolean, nullable=False, default=False)
+    fecha_creacion = db.Column(db.String(40), nullable=False, default=_utc_now_iso)
+    fecha_expiracion = db.Column(db.String(40), nullable=False)
+
+    user = db.relationship("User", backref="refresh_tokens")
+
+    def to_public_dict(self):
+        return {
+            "id": self.id,
+            "userId": self.user_id,
+            "revoked": bool(self.revoked),
+            "fechaCreacion": self.fecha_creacion,
+            "fechaExpiracion": self.fecha_expiracion,
+        }
+
+
 class Survey(db.Model):
     __tablename__ = "surveys"
 
