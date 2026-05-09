@@ -5,6 +5,9 @@ import hashlib
 import os
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+import json
+from urllib import request as urlrequest
+from urllib.error import HTTPError, URLError
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -16,6 +19,7 @@ _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 _ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ACCESS_TOKEN_TTL_SECONDS", "900"))
 _REFRESH_TOKEN_TTL_SECONDS = int(os.getenv("REFRESH_TOKEN_TTL_SECONDS", str(60 * 60 * 24 * 30)))
+_PASSWORD_RESET_TTL_SECONDS = int(os.getenv("PASSWORD_RESET_TTL_SECONDS", "900"))
 
 
 def _utc_now() -> datetime:
@@ -116,6 +120,59 @@ def _decode_refresh_token(token: str):
     if not user_id or not jti:
         return None, "REFRESH_INVALID"
     return {"user_id": str(user_id), "jti": str(jti)}, None
+
+
+def _issue_password_reset_token(user: User) -> str:
+    jti = uuid4().hex
+    return _serializer("password-reset").dumps({"typ": "pwd_reset", "sub": user.id, "jti": jti})
+
+
+def _decode_password_reset_token(token: str):
+    try:
+        payload = _serializer("password-reset").loads(token, max_age=_PASSWORD_RESET_TTL_SECONDS)
+    except SignatureExpired:
+        return None, "RESET_TOKEN_EXPIRED"
+    except BadSignature:
+        return None, "RESET_TOKEN_INVALID"
+
+    if not isinstance(payload, dict) or payload.get("typ") != "pwd_reset":
+        return None, "RESET_TOKEN_INVALID"
+    user_id = payload.get("sub")
+    if not user_id:
+        return None, "RESET_TOKEN_INVALID"
+    return str(user_id), None
+
+
+def _send_email_sendgrid(to_email: str, subject: str, plain_text: str, html: str | None = None) -> bool:
+    api_key = (os.getenv("SENDGRID_API_KEY") or "").strip()
+    from_email = (os.getenv("SENDGRID_FROM_EMAIL") or "").strip()
+    if not api_key or not from_email:
+        return False
+
+    payload: dict = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": from_email},
+        "subject": subject,
+        "content": [{"type": "text/plain", "value": plain_text}],
+    }
+    if html:
+        payload["content"].append({"type": "text/html", "value": html})
+
+    body = json.dumps(payload).encode("utf-8")
+    req = urlrequest.Request(
+        "https://api.sendgrid.com/v3/mail/send",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=10) as res:
+            return 200 <= res.status < 300
+    except (HTTPError, URLError):
+        return False
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -273,8 +330,56 @@ def refresh():
 @auth_bp.route("/recover-password", methods=["POST"])
 def recover_password():
     data = request.get_json(silent=True) or {}
-    email = data.get("email")
+    email = (data.get("email") or "").strip().lower()
     if not email:
         return jsonify({"success": False, "mensaje": "Email es requerido"}), 400
 
+    user = User.query.filter_by(email=email).first()
+    if user:
+        token = _issue_password_reset_token(user)
+        app_link = (os.getenv("PASSWORD_RESET_APP_LINK") or "").strip()
+        if not app_link:
+            app_link = "edu-retention://recover"
+        reset_url = f"{app_link}?token={token}"
+
+        subject = "Recuperación de contraseña"
+        plain = (
+            "Recibimos una solicitud para restablecer tu contraseña.\n\n"
+            f"Abre este enlace desde tu dispositivo:\n{reset_url}\n\n"
+            "Si no fuiste tú, ignora este mensaje."
+        )
+        html = (
+            "<p>Recibimos una solicitud para restablecer tu contraseña.</p>"
+            f"<p><a href=\"{reset_url}\">Restablecer contraseña</a></p>"
+            "<p>Si no fuiste tú, ignora este mensaje.</p>"
+        )
+        _send_email_sendgrid(email, subject, plain, html)
+
     return jsonify({"success": True, "mensaje": "Si el email existe, se enviará un correo de recuperación"}), 200
+
+
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip()
+    nueva = data.get("contraseña") or data.get("nuevaContraseña") or data.get("newPassword")
+
+    if not token or not nueva:
+        return jsonify({"success": False, "mensaje": "token y contraseña son requeridos"}), 400
+
+    if not isinstance(nueva, str) or len(nueva) < 6:
+        return jsonify({"success": False, "mensaje": "La contraseña debe tener mínimo 6 caracteres"}), 400
+
+    user_id, err = _decode_password_reset_token(token)
+    if err or not user_id:
+        return jsonify({"success": False, "mensaje": "Token inválido", "code": err}), 401
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"success": False, "mensaje": "Usuario no encontrado"}), 404
+
+    user.password_hash = generate_password_hash(nueva)
+    RefreshToken.query.filter_by(user_id=user.id, revoked=False).update({"revoked": True})
+    db.session.commit()
+
+    return jsonify({"success": True, "mensaje": "Contraseña actualizada correctamente"}), 200

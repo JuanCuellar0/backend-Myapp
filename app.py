@@ -332,6 +332,42 @@ def create_app():
                             "responses": {"200": {"description": "OK"}, "401": {"description": "Refresh inválido"}},
                         }
                     },
+                    "/api/auth/recover-password": {
+                        "post": {
+                            "summary": "Solicitar recuperación de contraseña",
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {"email": {"type": "string"}},
+                                            "required": ["email"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {"200": {"description": "OK"}},
+                        }
+                    },
+                    "/api/auth/reset-password": {
+                        "post": {
+                            "summary": "Restablecer contraseña con token",
+                            "requestBody": {
+                                "required": True,
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {"token": {"type": "string"}, "contraseña": {"type": "string"}},
+                                            "required": ["token", "contraseña"],
+                                        }
+                                    }
+                                },
+                            },
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "Token inválido"}},
+                        }
+                    },
                     "/api/users/profile": {
                         "get": {
                             "summary": "Obtener perfil",
