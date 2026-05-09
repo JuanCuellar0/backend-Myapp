@@ -354,6 +354,23 @@ def create_app():
                             "responses": {"200": {"description": "OK"}, "401": {"description": "No autorizado"}},
                         },
                     },
+                    "/risk/reports": {
+                        "get": {
+                            "summary": "Reportes de riesgo (derivados de respuestas)",
+                            "security": [{"bearerAuth": []}],
+                            "parameters": [
+                                {"name": "filtro", "in": "query", "required": False, "schema": {"type": "string"}}
+                            ],
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "No autorizado"}},
+                        }
+                    },
+                    "/risk/analysis": {
+                        "get": {
+                            "summary": "Análisis de riesgo (derivado de respuestas)",
+                            "security": [{"bearerAuth": []}],
+                            "responses": {"200": {"description": "OK"}, "401": {"description": "No autorizado"}},
+                        }
+                    },
                 },
             }
         )
@@ -399,6 +416,7 @@ def register_routes(app):
     """Registrar blueprints de rutas"""
     from routes.auth import auth_bp
     from routes.contacts import contacts_bp
+    from routes.risk import risk_bp
     from routes.surveys import surveys_bp
     from routes.users import users_bp
 
@@ -406,6 +424,7 @@ def register_routes(app):
     app.register_blueprint(users_bp)
     app.register_blueprint(surveys_bp)
     app.register_blueprint(contacts_bp)
+    app.register_blueprint(risk_bp)
 
 
 if __name__ == '__main__':
