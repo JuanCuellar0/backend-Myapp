@@ -44,6 +44,20 @@ def _hash_token(token: str) -> str:
     return digest.hexdigest()
 
 
+def _is_admin_registration(email: str, admin_code: str | None) -> bool:
+    allowlist = os.getenv("ADMIN_EMAILS") or os.getenv("ADMIN_EMAIL_WHITELIST") or ""
+    if allowlist.strip():
+        emails = {e.strip().lower() for e in allowlist.split(",") if e.strip()}
+        if email.strip().lower() in emails:
+            return True
+
+    expected_code = (os.getenv("ADMIN_REGISTRATION_CODE") or "").strip()
+    if expected_code and admin_code and str(admin_code).strip() == expected_code:
+        return True
+
+    return False
+
+
 def _issue_tokens(user: User):
     access_jti = uuid4().hex
     refresh_jti = uuid4().hex
@@ -141,6 +155,7 @@ def register():
     nombre = (data.get("nombre") or "").strip()
     email = (data.get("email") or "").strip().lower()
     contraseña = data.get("contraseña")
+    admin_code = data.get("adminCode") or data.get("admin_code")
 
     if not nombre or not email or not contraseña:
         return jsonify({"success": False, "mensaje": "Nombre, email y contraseña son requeridos"}), 400
@@ -157,12 +172,8 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"success": False, "mensaje": "El email ya está registrado"}), 409
 
-    nuevo_usuario = User(
-        nombre=nombre,
-        email=email,
-        password_hash=generate_password_hash(contraseña),
-        rol="user",
-    )
+    rol = "admin" if _is_admin_registration(email=email, admin_code=admin_code) else "user"
+    nuevo_usuario = User(nombre=nombre, email=email, password_hash=generate_password_hash(contraseña), rol=rol)
 
     try:
         db.session.add(nuevo_usuario)

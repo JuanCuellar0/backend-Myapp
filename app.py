@@ -282,6 +282,7 @@ def create_app():
                                                 "nombre": {"type": "string"},
                                                 "email": {"type": "string"},
                                                 "contraseña": {"type": "string"},
+                                                "adminCode": {"type": "string"},
                                             },
                                             "required": ["nombre", "email", "contraseña"],
                                         }
