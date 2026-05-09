@@ -102,7 +102,9 @@ def _normalize_questions(preguntas):
 
 
 def _maybe_seed_surveys():
-    if os.getenv("FLASK_ENV", "development").lower() != "development":
+    auto_seed = (os.getenv("AUTO_SEED_SURVEYS") or "").strip().lower() in {"1", "true", "yes", "on"}
+    is_dev = os.getenv("FLASK_ENV", "development").lower() == "development"
+    if not (auto_seed or is_dev):
         return
 
     if Survey.query.count() > 0:
