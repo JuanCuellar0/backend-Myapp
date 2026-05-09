@@ -107,9 +107,6 @@ def _maybe_seed_surveys():
     if not (auto_seed or is_dev):
         return
 
-    if Survey.query.count() > 0:
-        return
-
     demo_user = _ensure_default_user()
 
     encuestas = [
@@ -171,7 +168,12 @@ def _maybe_seed_surveys():
         },
     ]
 
+    created_any = False
     for encuesta in encuestas:
+        existing = Survey.query.filter_by(titulo=encuesta["titulo"]).first()
+        if existing:
+            continue
+
         survey = Survey(
             titulo=encuesta["titulo"],
             descripcion=encuesta["descripcion"],
@@ -191,7 +193,10 @@ def _maybe_seed_surveys():
             )
             db.session.add(question)
 
-    db.session.commit()
+        created_any = True
+
+    if created_any:
+        db.session.commit()
 
 
 @surveys_bp.route("", methods=["GET"])
